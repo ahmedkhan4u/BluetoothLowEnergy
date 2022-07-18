@@ -4,6 +4,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
@@ -66,10 +67,11 @@ public class MainActivity extends AppCompatActivity {
     // Device scan callback.
     private ScanCallback leScanCallback =
             new ScanCallback() {
+                @SuppressLint("MissingPermission")
                 @Override
                 public void onScanResult(int callbackType, ScanResult result) {
                     super.onScanResult(callbackType, result);
-                    Log.d("ble => ", result.getClass().getName().toString());
+                    Log.d("ble => ", result.getDevice().getName());
                     //leDeviceListAdapter.addDevice(result.getDevice());
                     //leDeviceListAdapter.notifyDataSetChanged();
                 }
