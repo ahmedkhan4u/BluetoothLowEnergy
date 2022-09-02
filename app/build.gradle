@@ -44,4 +44,7 @@ dependencies {
     implementation 'no.nordicsemi.android:ble:2.5.1'
     implementation 'no.nordicsemi.android:ble-livedata:2.5.1'
 
+    // Mesh Network
+    implementation 'no.nordicsemi.android:mesh:3.2.4'
+
 }

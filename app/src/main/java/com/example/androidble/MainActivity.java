@@ -1,7 +1,10 @@
 package com.example.androidble;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -15,6 +18,7 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
+import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.pm.PackageManager;
@@ -26,11 +30,26 @@ import android.widget.Toast;
 
 import com.example.androidble.Adapters.LeDeviceListAdapter;
 import com.example.androidble.Interfaces.DeviceSelectedCallback;
+import com.example.androidble.Utils.Utils;
 import com.example.androidble.ViewModels.MainActivityViewModel;
 import com.example.androidble.databinding.ActivityMainBinding;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+
+import no.nordicsemi.android.ble.callback.DataSentCallback;
+import no.nordicsemi.android.ble.data.Data;
+import no.nordicsemi.android.mesh.MeshManagerApi;
+import no.nordicsemi.android.mesh.MeshManagerCallbacks;
+import no.nordicsemi.android.mesh.MeshNetwork;
+import no.nordicsemi.android.mesh.MeshProvisioningStatusCallbacks;
+import no.nordicsemi.android.mesh.MeshStatusCallbacks;
+import no.nordicsemi.android.mesh.provisionerstates.ProvisioningState;
+import no.nordicsemi.android.mesh.provisionerstates.UnprovisionedMeshNode;
+import no.nordicsemi.android.mesh.transport.ControlMessage;
+import no.nordicsemi.android.mesh.transport.MeshMessage;
+import no.nordicsemi.android.mesh.transport.ProvisionedMeshNode;
 
 public class MainActivity extends AppCompatActivity implements DeviceSelectedCallback {
 
@@ -45,7 +64,9 @@ public class MainActivity extends AppCompatActivity implements DeviceSelectedCal
     private static final long SCAN_PERIOD = 3000;
     private ActivityMainBinding binding;
     private MainActivityViewModel viewModel;
-    private MyBleManager bleManager;
+
+
+    final String TAG = "MESH_PROVISIONING_DATA";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,8 +78,6 @@ public class MainActivity extends AppCompatActivity implements DeviceSelectedCal
         ScanFilter.Builder scanFilterBuilder = new ScanFilter.Builder();
         filterList.add(scanFilterBuilder.build());
         scanSettings = new ScanSettings.Builder().build();
-        bleManager = new MyBleManager(this);
-
 
         clickListener();
         binding.recyclerView.setLayoutManager(new LinearLayoutManager(this));
@@ -77,6 +96,7 @@ public class MainActivity extends AppCompatActivity implements DeviceSelectedCal
 
     }
 
+
     @SuppressLint("MissingPermission")
     private void clickListener() {
         binding.btnScan.setOnClickListener(view -> {
@@ -87,6 +107,11 @@ public class MainActivity extends AppCompatActivity implements DeviceSelectedCal
         binding.btnStop.setOnClickListener(view -> {
             bluetoothLeScanner.stopScan(leScanCallback);
             binding.progressBar.setVisibility(View.GONE);
+        });
+
+
+        binding.btnMesh.setOnClickListener(view -> {
+
         });
     }
 
@@ -152,13 +177,23 @@ public class MainActivity extends AppCompatActivity implements DeviceSelectedCal
     public void ICallback(int pos) {
         Toast.makeText(MainActivity.this, pos + "", Toast.LENGTH_SHORT).show();
         BluetoothDevice bleDevice = viewModel.getDeviceList().getValue().get(pos);
-        bleManager.connect(bleDevice)
+
+        List<BluetoothDevice> bluetoothDevices = viewModel.getDeviceList().getValue();
+
+        
+
+        viewModel.bleManager.connect(bleDevice)
                 .retry(5)
                 .timeout(15_000)
                 .useAutoConnect(true)
                 .before(device -> { Log.d("MyBleManager", "Before" + device.toString()); })
-                .done(device -> { Log.d("MyBleManager",  "Done" + device.toString()); })
+                .done(device -> { Log.d("MyBleManager",  "Done" + device.toString());
+                    Toast.makeText(MainActivity.this, "Device Connected.", Toast.LENGTH_SHORT).show();
+                })
                 .then(device -> { Log.d("MyBleManager",  "Then" + device.toString()); })
                 .enqueue();
+
+
     }
+
 }

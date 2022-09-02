@@ -6,8 +6,11 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
 import android.content.Context;
 import android.util.Log;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+
+import com.example.androidble.Utils.Utils;
 
 import java.util.UUID;
 
@@ -17,8 +20,49 @@ import no.nordicsemi.android.ble.callback.DataSentCallback;
 import no.nordicsemi.android.ble.data.Data;
 import no.nordicsemi.android.ble.livedata.ObservableBleManager;
 
-class MyBleManager extends ObservableBleManager implements DataReceivedCallback, DataSentCallback {
+public class MyBleManager extends ObservableBleManager implements DataReceivedCallback, DataSentCallback {
     private static final String TAG = "MyBleManager";
+
+    private static final int MTU_SIZE_DEFAULT = 23;
+    private static final int MTU_SIZE_MAX = 517;
+
+    /**
+     * Mesh provisioning service UUID
+     */
+    public final static UUID MESH_PROVISIONING_UUID = UUID.fromString("00001827-0000-1000-8000-00805F9B34FB");
+    /**
+     * Mesh provisioning data in characteristic UUID
+     */
+    private final static UUID MESH_PROVISIONING_DATA_IN = UUID.fromString("00002ADB-0000-1000-8000-00805F9B34FB");
+    /**
+     * Mesh provisioning data out characteristic UUID
+     */
+    private final static UUID MESH_PROVISIONING_DATA_OUT = UUID.fromString("00002ADC-0000-1000-8000-00805F9B34FB");
+
+    /**
+     * Mesh provisioning service UUID
+     */
+    public final static UUID MESH_PROXY_UUID = UUID.fromString("00001828-0000-1000-8000-00805F9B34FB");
+
+    /**
+     * Mesh provisioning data in characteristic UUID
+     */
+    private final static UUID MESH_PROXY_DATA_IN = UUID.fromString("00002ADD-0000-1000-8000-00805F9B34FB");
+
+    /**
+     * Mesh provisioning data out characteristic UUID
+     */
+    private final static UUID MESH_PROXY_DATA_OUT = UUID.fromString("00002ADE-0000-1000-8000-00805F9B34FB");
+
+    private BluetoothGattCharacteristic mMeshProvisioningDataInCharacteristic;
+    private BluetoothGattCharacteristic mMeshProvisioningDataOutCharacteristic;
+    private BluetoothGattCharacteristic mMeshProxyDataInCharacteristic;
+    private BluetoothGattCharacteristic mMeshProxyDataOutCharacteristic;
+
+    private boolean isProvisioningComplete;
+    private boolean mIsDeviceReady;
+    private boolean mNodeReset;
+
 
     private BluetoothGattCharacteristic fluxCapacitorControlPoint;
 
@@ -37,6 +81,7 @@ class MyBleManager extends ObservableBleManager implements DataReceivedCallback,
         // Log from here.
         Log.println(priority, TAG, message);
     }
+
 
     @NonNull
     @Override
@@ -59,33 +104,87 @@ class MyBleManager extends ObservableBleManager implements DataReceivedCallback,
         protected boolean isRequiredServiceSupported(@NonNull BluetoothGatt gatt) {
 
 
+            final BluetoothGattService meshProxyService = gatt.getService(MESH_PROXY_UUID);
+            if (meshProxyService != null) {
+                isProvisioningComplete = true;
+                mMeshProxyDataInCharacteristic = meshProxyService.getCharacteristic(MESH_PROXY_DATA_IN);
+                mMeshProxyDataOutCharacteristic = meshProxyService.getCharacteristic(MESH_PROXY_DATA_OUT);
+
+                return mMeshProxyDataInCharacteristic != null &&
+                        mMeshProxyDataOutCharacteristic != null &&
+                        hasNotifyProperty(mMeshProxyDataOutCharacteristic) &&
+                        hasWriteNoResponseProperty(mMeshProxyDataInCharacteristic);
+            }
+            final BluetoothGattService meshProvisioningService = gatt.getService(MESH_PROVISIONING_UUID);
+            if (meshProvisioningService != null) {
+                isProvisioningComplete = false;
+                mMeshProvisioningDataInCharacteristic = meshProvisioningService.getCharacteristic(MESH_PROVISIONING_DATA_IN);
+                mMeshProvisioningDataOutCharacteristic = meshProvisioningService.getCharacteristic(MESH_PROVISIONING_DATA_OUT);
+
+                return mMeshProvisioningDataInCharacteristic != null &&
+                        mMeshProvisioningDataOutCharacteristic != null &&
+                        hasNotifyProperty(mMeshProvisioningDataOutCharacteristic) &&
+                        hasWriteNoResponseProperty(mMeshProvisioningDataInCharacteristic);
+            }
+            return false;
+
+
 
             // Here get instances of your characteristics.
             // Return false if a required service has not been discovered.
-            BluetoothGattService fluxCapacitorService = gatt.getService(UUID.fromString("fe9dd9f3-99cd-4e0f-a76b-bfeab1c25624"));
-            if (fluxCapacitorService != null) {
-                fluxCapacitorControlPoint = fluxCapacitorService.getCharacteristic(UUID.fromString("ef44bc45-d877-40eb-92b7-0a4a3eae7f8a"));
-            }
-            return fluxCapacitorControlPoint != null;
+//            BluetoothGattService fluxCapacitorService = gatt.getService(UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E"));
+//            if (fluxCapacitorService != null) {
+//                fluxCapacitorControlPoint = fluxCapacitorService.getCharacteristic(UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e"));
+//            }
+//            return fluxCapacitorControlPoint != null;
         }
 
         @Override
         protected void initialize() {
-            // Initialize your device.
-            // This means e.g. enabling notifications, setting notification callbacks,
-            // sometimes writing something to some Control Point.
-            // Kotlin projects should not use suspend methods here, which require a scope.
-            requestMtu(517)
-                    .enqueue();
+            requestMtu(MTU_SIZE_MAX).enqueue();
+
+            // This callback will be called each time a notification is received.
+            DataReceivedCallback callback = new DataReceivedCallback() {
+                @Override
+                public void onDataReceived(@NonNull BluetoothDevice device, @NonNull Data data) {
+                    Utils.log(TAG, data.toString());
+                }
+            };
+
+            // Set the notification callback and enable notification on Data In characteristic.
+            final BluetoothGattCharacteristic characteristic = isProvisioningComplete ?
+                    mMeshProxyDataOutCharacteristic : mMeshProvisioningDataOutCharacteristic;
+            setNotificationCallback(characteristic).with(callback);
+            enableNotifications(characteristic).enqueue();
+
+
+
         }
 
         @Override
         protected void onServicesInvalidated() {
-            // This method is called when the services get invalidated, i.e. when the device
-            // disconnects.
-            // References to characteristics should be nullified here.
-            fluxCapacitorControlPoint = null;
+            overrideMtu(MTU_SIZE_DEFAULT);
+            mIsDeviceReady = false;
+            isProvisioningComplete = false;
+            mMeshProvisioningDataInCharacteristic = null;
+            mMeshProvisioningDataOutCharacteristic = null;
+            mMeshProxyDataInCharacteristic = null;
+            mMeshProxyDataOutCharacteristic = null;
+
         }
+
+        @Override
+        protected void onDeviceDisconnected() {
+            super.onDeviceDisconnected();
+        }
+    }
+
+    private boolean hasWriteNoResponseProperty(@NonNull final BluetoothGattCharacteristic characteristic) {
+        return (characteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0;
+    }
+
+    private boolean hasNotifyProperty(@NonNull final BluetoothGattCharacteristic characteristic) {
+        return (characteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0;
     }
 
 
@@ -95,4 +194,5 @@ class MyBleManager extends ObservableBleManager implements DataReceivedCallback,
         writeCharacteristic(fluxCapacitorControlPoint, Data.from("on"), BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
                 .enqueue();
     }
+
 }
