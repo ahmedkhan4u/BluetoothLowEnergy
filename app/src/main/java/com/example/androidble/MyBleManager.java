@@ -157,8 +157,6 @@ public class MyBleManager extends ObservableBleManager implements DataReceivedCa
             setNotificationCallback(characteristic).with(callback);
             enableNotifications(characteristic).enqueue();
 
-
-
         }
 
         @Override
